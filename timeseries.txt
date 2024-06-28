@@ -1,0 +1,348 @@
+**The entire floodplain shapefile was segmented into 147 DGOs [0-146]. 
+However, due to the "pixel limit" popup in the GEE interface, time-series 
+data for all 147 DGOs couldn't be extracted at once. So we created and 
+uploaded assets table1-table18 with each asset containing 10 DGOs 
+(eg. Table 1 has DGO 0-9). 
+
+**Time-series data for one LANDSAT collection/riverscape metric/asset
+ (e.g. LANDSAT 5/active channel/Table1) was extracted at a time while the 
+remaining LANDSAT collections/riverscape metrics/assets remained commented 
+for the time being. 
+
+var bn8 = ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B6', 'QA_PIXEL', 'SR_B5', 'SR_B7'];
+var bn7 = ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'QA_PIXEL', 'SR_B5', 'SR_B7'];
+var bn5 = ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'QA_PIXEL', 'SR_B5', 'SR_B7'];
+
+// implies commented line(s)
+// var S2=ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
+//   .filterDate('1988-01-01', '2012-05-05')
+//   .filterMetadata('CLOUD_COVER','less_than',0.02).select(bn5);
+
+
+var S2 = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2")
+  .filterDate('2012-05-06', '2013-04-01')
+    .filterMetadata('CLOUD_COVER','less_than',0.02).select(bn7);
+
+
+// var S2 =ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+//       .filterDate('2013-04-02','2021-12-31')
+//     .filterMetadata('CLOUD_COVER','less_than',0.02).select(bn8);
+
+// Define the numerical value to be added and multiplied
+var addValue = -0.2;
+var multiplyValue = 2.75e-05;
+
+// Define the function to add and multiply values to each image
+var addAndMultiply = function(image) {
+  return image.add(addValue).multiply(multiplyValue);
+};
+
+// Apply the function to each collection
+var S2 = S2.map(addAndMultiply);
+
+//change bands according to LANDSAT collection for NDVI and MNDWI collection
+var addNDVI = function(image) {
+  var NDVI = image.expression(  
+    '(NIR-RED)/(NIR+RED)', {
+      'RED': image.select('SR_B3'),
+      'NIR': image.select('SR_B4')
+    }).rename('NDVI');
+  return image.addBands(NDVI);
+};
+var addMNDWI = function(image) {
+  var MNDWI = image.expression(
+    '(GREEN-SWIR)/(GREEN+SWIR)', {
+      'GREEN': image.select('SR_B2'),
+      'SWIR': image.select('SR_B5')
+
+    }).rename('MNDWI');
+
+  return image.addBands(MNDWI);
+};
+
+
+//wetted channel mask
+var addWater = function(image) {
+  var Water = image.expression(
+    '(mndwi>=(-0.05)) and (ndvi<=(0.025))', {
+      'ndvi': image.select('NDVI'),
+      'mndwi': image.select('MNDWI')
+
+    }).rename('water');
+  Water = Water.updateMask(Water) 
+  return image.addBands(Water);
+};
+
+
+//active_channel mask
+var addAC = function(image) {
+  var AC = image.expression(
+    'ndvi<=(0.08)', {
+      'ndvi': image.select('NDVI')
+    }).rename('active');
+  AC = AC.updateMask(AC) 
+  return image.addBands(AC);
+};
+
+
+// riparian vegetation mask
+var addVegetation = function(image) {
+  var Vegetation = image.expression(
+    ' ndvi>(0.08)', {
+      'ndvi': image.select('NDVI')
+    }).rename('vegetation');
+  Vegetation = Vegetation.updateMask(Vegetation) 
+  return image.addBands(Vegetation);
+};
+
+
+// Function to obtain the perimeter of the water mask
+var addWaterPerimeter = function(image) {
+  var waterMask = image.select('water').selfMask();
+  var waterVector = waterMask.reduceToVectors({
+    geometryType: 'polygon',
+    reducer: ee.Reducer.countEvery(),
+    scale: 30,
+    maxPixels: 1e13
+  });
+  
+  var waterPerimeter = waterVector.map(function(feature) {
+    return feature.set('perimeter', feature.perimeter());
+  });
+  
+  // Add perimeter as a band (optional)
+  var waterPerimeterImage = waterPerimeter.reduceToImage(['perimeter'], ee.Reducer.first()).rename('water_perimeter');
+  
+  return image.addBands(waterPerimeterImage);
+};
+
+
+S2 = S2.map(addNDVI);
+S2 = S2.map(addMNDWI);
+// S2 = S2.map(addAC);
+S2 = S2.map(addWater);
+// S2 = S2.map(addVegetation);
+//S2=S2..map(addWaterPerimeter)
+print(S2.first().bandNames());
+
+//wetted channel
+var chart1 = ui.Chart.image.seriesByRegion({
+          imageCollection: S2, band: 'water',
+          regions:
+          table1,
+          // table2,
+          // table3,
+          // table4,
+          // table5,
+          // table6,
+          // table7,
+          // table8,
+          // table9,
+          // table10,
+          // table11,
+          // table12,
+          // table13,
+          // table14,
+          // table15,
+          // table16,
+          // table17,
+          // table18,
+          reducer: ee.Reducer.sum(),
+          scale:30,
+ 
+})
+  .setSeriesNames([
+'0','1','2','3','4','5','6','7','8','9'
+// '10','11','12','13','14','15','16','17','18','19'
+// '20','21','22','23','24','25','26','27','28','29'
+// '30','31','32','33','34','35','36','37','38','39'
+// '40','41','42','43','44','45','46','47','48','49'
+// '50','51','52','53','54'
+// '55','56','57','58','59'
+// '60','61','62','63','64'
+// '65','66','67','68','69'
+// '70','71','72','73','74'
+// '75','76','77','78','79'
+// '80','81','82','83','84','85','86','87','88','89'
+// '90','91','92','93','94','95','96','97','98','99'
+// '100','101','102','103','104','105','106','107','108','109'
+// '110','111','112','113','114','115','116','117','118','119'
+// '120','121','122','123','124','125','126','127','128','129'
+// '130','131','132','133','134','135','136','137','138','139'
+// '140','141','142','143','144','145','146'
+])
+  .setOptions({
+      hAxis: {'title': 'Active_Dates'},
+      vAxis: {'title': 'Pixel count'},
+      lineWidth: 2
+    })
+print(chart1);
+
+
+//active channel
+var chart2 = ui.Chart.image.seriesByRegion({
+          imageCollection: S2, band: 'active',
+          regions:
+          table1,
+          // table2,
+          // table3,
+          // table4,
+          // table5,
+          // table6,
+          // table7,
+          // table8,
+          // table9,
+          // table10,
+          // table11,
+          // table12,
+          // table13,
+          // table14,
+          // table15,
+          // table16,
+          // table17,
+          // table18,
+          reducer: ee.Reducer.sum(),
+          scale:30,
+ 
+})
+  .setSeriesNames([
+'0','1','2','3','4','5','6','7','8','9'
+// '10','11','12','13','14','15','16','17','18','19'
+// '20','21','22','23','24','25','26','27','28','29'
+// '30','31','32','33','34','35','36','37','38','39'
+// '40','41','42','43','44','45','46','47','48','49'
+// '50','51','52','53','54'
+// '55','56','57','58','59'
+// '60','61','62','63','64'
+// '65','66','67','68','69'
+// '70','71','72','73','74'
+// '75','76','77','78','79'
+// '80','81','82','83','84','85','86','87','88','89'
+// '90','91','92','93','94','95','96','97','98','99'
+// '100','101','102','103','104','105','106','107','108','109'
+// '110','111','112','113','114','115','116','117','118','119'
+// '120','121','122','123','124','125','126','127','128','129'
+// '130','131','132','133','134','135','136','137','138','139'
+// '140','141','142','143','144','145','146'
+])
+  .setOptions({
+      hAxis: {'title': 'Active_Dates'},
+      vAxis: {'title': 'Pixel count'},
+      lineWidth: 2
+    })
+print(chart2);
+
+//riparian vegetation
+// var chart3 = ui.Chart.image.seriesByRegion({
+//           imageCollection: S2, band: 'vegetation',
+//           regions:
+//           table1,
+//           // table2,
+//           // table3,
+//           // table4,
+//           // table5,
+//           // table6,
+//           // table7,
+//           // table8,
+//           // table9,
+//           // table10,
+//           // table11,
+//           // table12,
+//           // table13,
+//           // table14,
+//           // table15,
+//           // table16,
+//           // table17,
+//           // table18,
+//           reducer: ee.Reducer.sum(),
+//           scale:30,
+ 
+// })
+//   .setSeriesNames([
+// '0','1','2','3','4','5','6','7','8','9'
+// // '10','11','12','13','14','15','16','17','18','19'
+// // '20','21','22','23','24','25','26','27','28','29'
+// // '30','31','32','33','34','35','36','37','38','39'
+// // '40','41','42','43','44','45','46','47','48','49'
+// // '50','51','52','53','54'
+// // '55','56','57','58','59'
+// // '60','61','62','63','64'
+// // '65','66','67','68','69'
+// // '70','71','72','73','74'
+// // '75','76','77','78','79'
+// // '80','81','82','83','84','85','86','87','88','89'
+// // '90','91','92','93','94','95','96','97','98','99'
+// // '100','101','102','103','104','105','106','107','108','109'
+// // '110','111','112','113','114','115','116','117','118','119'
+// // '120','121','122','123','124','125','126','127','128','129'
+// // '130','131','132','133','134','135','136','137','138','139'
+// // '140','141','142','143','144','145','146'
+// ])
+//   .setOptions({
+//       hAxis: {'title': 'Vegetation_Dates'},
+//       vAxis: {'title': 'Pixel count'},
+//       lineWidth: 2
+//     })
+// print(chart3);
+
+//water mask perimeter
+// var chart4 = ui.Chart.image.seriesByRegion({
+//           imageCollection: S2, band: 'water_perimeter',
+//           regions:
+//           table1,
+//           // table2,
+//           // table3,
+//           // table4,
+//           // table5,
+//           // table6,
+//           // table7,
+//           // table8,
+//           // table9,
+//           // table10,
+//           // table11,
+//           // table12,
+//           // table13,
+//           // table14,
+//           // table15,
+//           // table16,
+//           // table17,
+//           // table18,
+//           reducer: ee.Reducer.sum(),
+//           scale:30,
+ 
+// })
+//   .setSeriesNames([
+// '0','1','2','3','4','5','6','7','8','9'
+// // '10','11','12','13','14','15','16','17','18','19'
+// // '20','21','22','23','24','25','26','27','28','29'
+// // '30','31','32','33','34','35','36','37','38','39'
+// // '40','41','42','43','44','45','46','47','48','49'
+// // '50','51','52','53','54'
+// // '55','56','57','58','59'
+// // '60','61','62','63','64'
+// // '65','66','67','68','69'
+// // '70','71','72','73','74'
+// // '75','76','77','78','79'
+// // '80','81','82','83','84','85','86','87','88','89'
+// // '90','91','92','93','94','95','96','97','98','99'
+// // '100','101','102','103','104','105','106','107','108','109'
+// // '110','111','112','113','114','115','116','117','118','119'
+// // '120','121','122','123','124','125','126','127','128','129'
+// // '130','131','132','133','134','135','136','137','138','139'
+// // '140','141','142','143','144','145','146'
+// ])
+//   .setOptions({
+//       hAxis: {'title': 'Perimeter_Dates'},
+//       vAxis: {'title': 'Pixel count'},
+//       lineWidth: 2
+//     })
+// print(chart4);
+
+
+
+
+
+
+
+
+
