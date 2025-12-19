@@ -1,0 +1,6 @@
+geopandas
+numpy
+matplotlib
+shapely
+joblib
+tqdm
