@@ -1,7 +1,7 @@
 # Riverscape-metrics-timeseries
 
 **Floodplain segmentation:**
-Floodplain segmentation into DGOs was implemented in a Python environment in Google Colab. The code file is **Floodplain_segmentation.ipynb**.
+Floodplain segmentation into DGOs was implemented in a Python environment in Google Colab. The code file is **Floodplain_segmentation.py**.
 
 **Riverscape metrics time series generation:**
 Google Earth Engine has been utilised to generate riverscape metrics time series of pixel count and water mask perimeter for each date and DGO. The code has been provided in the **timeseries.txt**. 
